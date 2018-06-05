@@ -1,15 +1,33 @@
 # defaults file for haproxy
 ---
-haproxy_version: 1.6
+haproxy_version: 1.8
+haproxy_subversion: 9
+haproxy_source_url: "http://www.haproxy.org/download/{{ haproxy_version }}/src/haproxy-{{ haproxy_version }}.{{ haproxy_subversion }}.tar.gz"
+
+haproxy_install_path: "/opt/haproxy"
+haproxy_build_options:
+  PREFIX: "{{ haproxy_install_path }}"
+  TARGET: linux2628
+  USE_SYSTEMD: 1
+  USE_OPENSSL: 1
+  USE_PCRE: 1
+  USE_ZLIB: 1
+
+haproxy_user: haproxy
 
 haproxy_dependencies:
-  - name: haproxy
-    state: latest
+  - build-essential
+  - libssl-dev
+  - libsystemd-dev
+  - libpcre3-dev
+  - zlib1g-dev
+
 haproxy_install: []
 
 haproxy_restart_handler_state: restarted
 
 haproxy_conf_template: "etc/haproxy/haproxy.cfg.j2"
+haproxy_error_files_location: "files/errors/*.http"
 
 # global section
 haproxy_global_log:

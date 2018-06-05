@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+
+[Unit]
+Description=HAProxy Load Balancer
+After=network.target
+
+[Service]
+Environment="CONFIG=/etc/haproxy/haproxy.cfg" "PIDFILE=/run/haproxy.pid"
+ExecStartPre=/usr/bin/haproxy -f $CONFIG -c -q
+ExecStart=/usr/bin/haproxy -Ws -f $CONFIG -p $PIDFILE
+ExecReload=/usr/bin/haproxy -f $CONFIG -c -q
+ExecReload=/bin/kill -USR2 $MAINPID
+KillMode=mixed
+Restart=always
+Type=notify
+
+NoNewPrivileges=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

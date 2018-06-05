@@ -1,24 +1,98 @@
 # tasks file for haproxy
 ---
-- name: install | add repository from PPA and install its signing key
-  apt_repository:
-    repo: "{{ haproxy_ppa }}"
-    update_cache: true
+- name: "create haproxy user"
+  user:
+    name: "{{ haproxy_user }}"
+    system: yes
+    create_home: no
   tags:
-    - haproxy-install-add-repository
+    - haproxy-install-prepare
+
+- name: install | create directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    mode: 0755
+  with_items:
+    - "/etc/haproxy"
+    - "/run/haproxy"
+  tags:
+    - haproxy-install-prepare
 
 - name: install | dependencies
   apt:
-    name: "{{ item.name }}"
-    state: "{{ item.state }}"
+    name: "{{ item }}"
+    state: "present"
   with_items: "{{ haproxy_dependencies }}"
   tags:
     - haproxy-install-dependencies
 
-- name: install | additional
-  apt:
-    name: "{{ item }}"
-    state: "{{ apt_install_state | default('latest') }}"
-  with_items: "{{ haproxy_install }}"
+- name: install | get source code
+  get_url:
+    url: "{{ haproxy_source_url }}"
+    dest: "/usr/local/src/"
   tags:
-    - haproxy-install-additional
+    - haproxy-install-build
+
+- name: install | unarchive
+  unarchive:
+    src: "/usr/local/src/haproxy-{{ haproxy_version }}.{{ haproxy_subversion }}.tar.gz"
+    dest: "/usr/local/src/"
+    remote_src: yes
+  tags:
+    - haproxy-install-build
+
+- name: install | build
+  make:
+    chdir: "/usr/local/src/haproxy-{{ haproxy_version }}.{{ haproxy_subversion }}/"
+    params: "{{ haproxy_build_options }}"
+  register: haproxy_build_updated
+  tags:
+    - haproxy-install-build
+
+- name: install | make install
+  make:
+    chdir: "/usr/local/src/haproxy-{{ haproxy_version }}.{{ haproxy_subversion }}/"
+    target: install
+    params: "{{ haproxy_build_options }}"
+  when: haproxy_build_updated.changed
+  tags:
+    - haproxy-install-build
+
+- name: install | link
+  file:
+    src: "{{ haproxy_install_path }}/sbin/haproxy"
+    dest: "/usr/bin/haproxy"
+    state: link
+  tags:
+    - haproxy-install-build
+
+- name: install | upload error files
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/haproxy/errors/"
+  with_fileglob:
+    - "{{ haproxy_error_files_location }}"
+  tags:
+    - haproxy-install-build
+
+- name: install | add service file
+  template:
+    src: "etc/systemd/system/haproxy.service.j2"
+    dest: /etc/systemd/system/haproxy.service
+    owner: root
+    group: root
+    mode: 0640
+  when: ansible_service_mgr == 'systemd'
+  register: haproxy_service_updated
+  notify: restart haproxy
+  tags:
+    - haproxy-configuration-service
+
+- name: "(haproxy) systemd daemon reload"
+  systemd:
+    daemon-reload: True
+  when: haproxy_service_updated.changed
+  tags:
+    - haproxy-configuration-service
